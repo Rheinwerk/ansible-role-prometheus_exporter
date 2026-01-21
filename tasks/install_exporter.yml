@@ -1,0 +1,125 @@
+---
+# Install a single Prometheus exporter
+# Called from main.yml with _exporter variable set
+
+- name: "{{ _exporter.name }} | Create system group"
+  ansible.builtin.group:
+    name: "{{ _exporter_system_group }}"
+    system: true
+    state: present
+
+- name: "{{ _exporter.name }} | Create system user"
+  ansible.builtin.user:
+    name: "{{ _exporter_system_user }}"
+    group: "{{ _exporter_system_group }}"
+    system: true
+    shell: /usr/sbin/nologin
+    home: "{{ _exporter_config_dir }}"
+    createhome: false
+
+- name: "{{ _exporter.name }} | Create config directory"
+  ansible.builtin.file:
+    path: "{{ _exporter_config_dir }}"
+    state: directory
+    owner: "{{ _exporter_system_user }}"
+    group: "{{ _exporter_system_group }}"
+    mode: "0755"
+
+- name: "{{ _exporter.name }} | Check if exporter is already installed"
+  ansible.builtin.stat:
+    path: "{{ prometheus_exporter_install_dir }}/{{ _exporter_binary_name }}"
+  register: _exporter_binary
+
+- name: "{{ _exporter.name }} | Check installed version"
+  ansible.builtin.command:
+    cmd: "{{ prometheus_exporter_install_dir }}/{{ _exporter_binary_name }} --version"
+  register: _exporter_version_check
+  changed_when: false
+  failed_when: false
+  when: _exporter_binary.stat.exists
+
+- name: "{{ _exporter.name }} | Set version needs update fact"
+  ansible.builtin.set_fact:
+    _exporter_needs_update: >-
+      {{ not _exporter_binary.stat.exists or
+         (_exporter.version not in (_exporter_version_check.stdout | default('') + _exporter_version_check.stderr | default(''))) }}
+
+- name: "{{ _exporter.name }} | Download and install exporter"
+  when: _exporter_needs_update
+  block:
+    - name: "{{ _exporter.name }} | Get release info from GitHub API"
+      ansible.builtin.uri:
+        url: "https://api.github.com/repos/{{ _exporter_github_org }}/{{ _exporter_github_repo }}/releases/tags/v{{ _exporter.version }}"
+        method: GET
+        return_content: true
+      register: _github_release
+      when:
+        - _exporter.download_url is not defined or _exporter.download_url | length == 0
+
+    - name: "{{ _exporter.name }} | Find matching asset for architecture"
+      ansible.builtin.set_fact:
+        _detected_download_url: >-
+          {{ (_github_release.json.assets | selectattr('name', 'search', 'linux') | selectattr('name', 'search', _exporter_arch) | selectattr('name', 'search', '\.tar\.gz$') | first).browser_download_url }}
+      when:
+        - _exporter.download_url is not defined or _exporter.download_url | length == 0
+
+    - name: "{{ _exporter.name }} | Set final download URL"
+      ansible.builtin.set_fact:
+        _final_download_url: "{{ _exporter.download_url | default(_detected_download_url) }}"
+
+    - name: "{{ _exporter.name }} | Create temporary directory"
+      ansible.builtin.tempfile:
+        state: directory
+        suffix: "{{ _exporter.name }}"
+      register: _temp_dir
+
+    - name: "{{ _exporter.name }} | Download exporter archive"
+      ansible.builtin.get_url:
+        url: "{{ _final_download_url }}"
+        dest: "{{ _temp_dir.path }}/{{ _exporter.name }}.tar.gz"
+        mode: "0644"
+
+    - name: "{{ _exporter.name }} | Extract exporter archive"
+      ansible.builtin.unarchive:
+        src: "{{ _temp_dir.path }}/{{ _exporter.name }}.tar.gz"
+        dest: "{{ _temp_dir.path }}"
+        remote_src: true
+
+    - name: "{{ _exporter.name }} | Find extracted binary"
+      ansible.builtin.find:
+        paths: "{{ _temp_dir.path }}"
+        patterns: "{{ _exporter_binary_name }}"
+        recurse: true
+        file_type: file
+      register: _found_binary
+
+    - name: "{{ _exporter.name }} | Install exporter binary"
+      ansible.builtin.copy:
+        src: "{{ _found_binary.files[0].path }}"
+        dest: "{{ prometheus_exporter_install_dir }}/{{ _exporter_binary_name }}"
+        owner: root
+        group: root
+        mode: "0755"
+        remote_src: true
+
+    - name: "{{ _exporter.name }} | Cleanup temporary directory"
+      ansible.builtin.file:
+        path: "{{ _temp_dir.path }}"
+        state: absent
+
+- name: "{{ _exporter.name }} | Create systemd service file"
+  ansible.builtin.template:
+    src: exporter.service.j2
+    dest: "/etc/systemd/system/{{ _exporter_service_name }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - reload systemd
+
+- name: "{{ _exporter.name }} | Configure service state"
+  ansible.builtin.systemd:
+    name: "{{ _exporter_service_name }}"
+    enabled: "{{ _exporter.service_enabled | default(prometheus_exporter_service_enabled) }}"
+    state: "{{ _exporter.service_state | default(prometheus_exporter_service_state) }}"
+    daemon_reload: true

@@ -1,48 +1,40 @@
 ---
 # Generic Prometheus Exporter Role
-# This role installs any Prometheus exporter from GitHub releases
+# This role installs Prometheus exporters from GitHub releases
 
-# Exporter configuration - must be provided when using the role
-prometheus_exporter_name: ""
-prometheus_exporter_version: ""
+# List of exporters to install
+# Each exporter can have the following properties:
+#   name: (required) Name of the exporter
+#   version: (required) Version to install
+#   listen_port: (required) Port to listen on
+#   listen_address: (optional) Address to listen on (default: 127.0.0.1)
+#   github_org: (optional) GitHub organization (default: prometheus-community)
+#   github_repo: (optional) GitHub repository name (default: same as name)
+#   arch: (optional) Architecture override (default: auto-detected)
+#   download_url: (optional) Full download URL (default: auto-detected from GitHub releases)
+#   binary_name: (optional) Binary name (default: same as name)
+#   system_user: (optional) System user (default: derived from name)
+#   system_group: (optional) System group (default: same as system_user)
+#   config_dir: (optional) Config directory (default: /etc/{name})
+#   service_name: (optional) Systemd service name (default: same as name)
+#   service_enabled: (optional) Enable service (default: true)
+#   service_state: (optional) Service state (default: stopped)
+#   extra_args: (optional) Extra command line arguments (default: [])
+#   env_vars: (optional) Environment variables for systemd service (default: {})
+prometheus_exporters: []
+
+# Default listen address for all exporters
 prometheus_exporter_listen_address: "127.0.0.1"
-prometheus_exporter_listen_port: ""
 
-# GitHub repository (default: prometheus-community or prometheus org)
-prometheus_exporter_github_org: "prometheus-community"
-prometheus_exporter_github_repo: "{{ prometheus_exporter_name }}"
-
-# Binary name (usually same as exporter name)
-prometheus_exporter_binary_name: "{{ prometheus_exporter_name }}"
-
-# System user/group for the exporter
-prometheus_exporter_system_user: "{{ prometheus_exporter_name | replace('-', '_') | replace('_exporter', '') }}_exporter"
-prometheus_exporter_system_group: "{{ prometheus_exporter_system_user }}"
-
-# Installation paths
-prometheus_exporter_install_dir: "/usr/local/bin"
-prometheus_exporter_config_dir: "/etc/{{ prometheus_exporter_name }}"
-
-# Service configuration
-prometheus_exporter_service_name: "{{ prometheus_exporter_name }}"
+# Default service configuration
 prometheus_exporter_service_enabled: true
 prometheus_exporter_service_state: stopped
 
-# Extra command line arguments (list)
-prometheus_exporter_extra_args: []
-
-# Environment variables for systemd service
-prometheus_exporter_env_vars: {}
+# Installation path
+prometheus_exporter_install_dir: "/usr/local/bin"
 
 # Architecture mapping
 prometheus_exporter_arch_map:
   x86_64: "amd64"
   aarch64: "arm64"
   armv7l: "armv7"
-
-# Download URL template (can be overridden for non-standard releases)
-prometheus_exporter_download_url: >-
-  https://github.com/{{ prometheus_exporter_github_org }}/{{ prometheus_exporter_github_repo }}/releases/download/v{{ prometheus_exporter_version }}/{{ prometheus_exporter_name }}-{{ prometheus_exporter_version }}.linux-{{ prometheus_exporter_arch_map[ansible_architecture] | default('amd64') }}.tar.gz
-
-# Checksum URL (optional)
-prometheus_exporter_checksum_url: ""

@@ -1,31 +1,31 @@
 {{ ansible_managed | comment }}
 
 [Unit]
-Description=Prometheus {{ prometheus_exporter_name }}
-Documentation=https://github.com/{{ prometheus_exporter_github_org }}/{{ prometheus_exporter_github_repo }}
+Description=Prometheus {{ _exporter.name }}
+Documentation=https://github.com/{{ _exporter_github_org }}/{{ _exporter_github_repo }}
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User={{ prometheus_exporter_system_user }}
-Group={{ prometheus_exporter_system_group }}
-{% for key, value in prometheus_exporter_env_vars.items() %}
+User={{ _exporter_system_user }}
+Group={{ _exporter_system_group }}
+{% for key, value in _exporter_env_vars.items() %}
 Environment="{{ key }}={{ value }}"
 {% endfor %}
-ExecStart={{ prometheus_exporter_install_dir }}/{{ prometheus_exporter_binary_name }} \
-{% if prometheus_exporter_web_listen_flag is defined %}
-    {{ prometheus_exporter_web_listen_flag }}={{ prometheus_exporter_listen_address }}:{{ prometheus_exporter_listen_port }} \
+ExecStart={{ prometheus_exporter_install_dir }}/{{ _exporter_binary_name }} \
+{% if _exporter.web_listen_flag is defined %}
+    {{ _exporter.web_listen_flag }}={{ _exporter_listen_address }}:{{ _exporter_listen_port }} \
 {% else %}
-    --web.listen-address={{ prometheus_exporter_listen_address }}:{{ prometheus_exporter_listen_port }} \
+    --web.listen-address={{ _exporter_listen_address }}:{{ _exporter_listen_port }} \
 {% endif %}
-{% for arg in prometheus_exporter_extra_args %}
+{% for arg in _exporter_extra_args %}
     {{ arg }}{% if not loop.last %} \{% endif %}
 
 {% endfor %}
 
 ExecReload=/bin/kill -HUP $MAINPID
-SyslogIdentifier={{ prometheus_exporter_name }}
+SyslogIdentifier={{ _exporter.name }}
 Restart=on-failure
 RestartSec=5
 
@@ -43,9 +43,7 @@ ProtectKernelLogs=yes
 ProtectControlGroups=yes
 RestrictRealtime=yes
 RestrictSUIDSGID=yes
-{% if prometheus_exporter_config_dir is defined %}
-ReadWritePaths={{ prometheus_exporter_config_dir }}
-{% endif %}
+ReadWritePaths={{ _exporter_config_dir }}
 
 [Install]
 WantedBy=multi-user.target

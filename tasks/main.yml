@@ -1,114 +1,27 @@
 ---
-# Main tasks for installing a Prometheus exporter
-
-- name: Validate required variables
+- name: Validate prometheus_exporters list
   ansible.builtin.assert:
     that:
-      - prometheus_exporter_name | length > 0
-      - prometheus_exporter_version | length > 0
-      - prometheus_exporter_listen_port | string | length > 0
-    fail_msg: "Required variables prometheus_exporter_name, prometheus_exporter_version, and prometheus_exporter_listen_port must be set"
+      - prometheus_exporters is defined
+      - prometheus_exporters | length > 0
+    fail_msg: "prometheus_exporters list must be defined and non-empty"
 
-- name: Create system group
-  ansible.builtin.group:
-    name: "{{ prometheus_exporter_system_group }}"
-    system: true
-    state: present
-
-- name: Create system user
-  ansible.builtin.user:
-    name: "{{ prometheus_exporter_system_user }}"
-    group: "{{ prometheus_exporter_system_group }}"
-    system: true
-    shell: /usr/sbin/nologin
-    home: "{{ prometheus_exporter_config_dir }}"
-    createhome: false
-
-- name: Create config directory
-  ansible.builtin.file:
-    path: "{{ prometheus_exporter_config_dir }}"
-    state: directory
-    owner: "{{ prometheus_exporter_system_user }}"
-    group: "{{ prometheus_exporter_system_group }}"
-    mode: "0755"
-
-- name: Check if exporter is already installed
-  ansible.builtin.stat:
-    path: "{{ prometheus_exporter_install_dir }}/{{ prometheus_exporter_binary_name }}"
-  register: _exporter_binary
-
-- name: Check installed version
-  ansible.builtin.command:
-    cmd: "{{ prometheus_exporter_install_dir }}/{{ prometheus_exporter_binary_name }} --version"
-  register: _exporter_version_check
-  changed_when: false
-  failed_when: false
-  when: _exporter_binary.stat.exists
-
-- name: Set version needs update fact
-  ansible.builtin.set_fact:
-    _exporter_needs_update: >-
-      {{ not _exporter_binary.stat.exists or
-         (prometheus_exporter_version not in (_exporter_version_check.stdout | default('') + _exporter_version_check.stderr | default(''))) }}
-
-- name: Download and install exporter
-  when: _exporter_needs_update
-  block:
-    - name: Create temporary directory
-      ansible.builtin.tempfile:
-        state: directory
-        suffix: "{{ prometheus_exporter_name }}"
-      register: _temp_dir
-
-    - name: Download exporter archive
-      ansible.builtin.get_url:
-        url: "{{ prometheus_exporter_download_url }}"
-        dest: "{{ _temp_dir.path }}/{{ prometheus_exporter_name }}.tar.gz"
-        mode: "0644"
-
-    - name: Extract exporter archive
-      ansible.builtin.unarchive:
-        src: "{{ _temp_dir.path }}/{{ prometheus_exporter_name }}.tar.gz"
-        dest: "{{ _temp_dir.path }}"
-        remote_src: true
-
-    - name: Find extracted binary
-      ansible.builtin.find:
-        paths: "{{ _temp_dir.path }}"
-        patterns: "{{ prometheus_exporter_binary_name }}"
-        recurse: true
-        file_type: file
-      register: _found_binary
-
-    - name: Install exporter binary
-      ansible.builtin.copy:
-        src: "{{ _found_binary.files[0].path }}"
-        dest: "{{ prometheus_exporter_install_dir }}/{{ prometheus_exporter_binary_name }}"
-        owner: root
-        group: root
-        mode: "0755"
-        remote_src: true
-      notify: restart prometheus exporter
-
-    - name: Cleanup temporary directory
-      ansible.builtin.file:
-        path: "{{ _temp_dir.path }}"
-        state: absent
-
-- name: Create systemd service file
-  ansible.builtin.template:
-    src: exporter.service.j2
-    dest: "/etc/systemd/system/{{ prometheus_exporter_service_name }}.service"
-    owner: root
-    group: root
-    mode: "0644"
-  notify:
-    - reload systemd
-    - restart prometheus exporter
-
-- name: Configure service state
-  ansible.builtin.systemd:
-    name: "{{ prometheus_exporter_service_name }}"
-    enabled: "{{ prometheus_exporter_service_enabled }}"
-    state: "{{ prometheus_exporter_service_state }}"
-    daemon_reload: true
+- name: Install exporters
+  ansible.builtin.include_tasks: install_exporter.yml
+  loop: "{{ prometheus_exporters }}"
+  loop_control:
+    loop_var: _exporter
+    label: "{{ _exporter.name }}"
+  vars:
+    _exporter_arch: "{{ _exporter.arch | default(prometheus_exporter_arch_map[ansible_architecture] | default('amd64')) }}"
+    _exporter_github_org: "{{ _exporter.github_org | default('prometheus-community') }}"
+    _exporter_github_repo: "{{ _exporter.github_repo | default(_exporter.name) }}"
+    _exporter_binary_name: "{{ _exporter.binary_name | default(_exporter.name) }}"
+    _exporter_system_user: "{{ _exporter.system_user | default(_exporter.name | replace('-', '_') | replace('_exporter', '') + '_exporter') }}"
+    _exporter_system_group: "{{ _exporter.system_group | default(_exporter_system_user) }}"
+    _exporter_config_dir: "{{ _exporter.config_dir | default('/etc/' + _exporter.name) }}"
+    _exporter_service_name: "{{ _exporter.service_name | default(_exporter.name) }}"
+    _exporter_extra_args: "{{ _exporter.extra_args | default([]) }}"
+    _exporter_env_vars: "{{ _exporter.env_vars | default({}) }}"
+    _exporter_listen_address: "{{ _exporter.listen_address | default(prometheus_exporter_listen_address) }}"
+    _exporter_listen_port: "{{ _exporter.listen_port }}"
