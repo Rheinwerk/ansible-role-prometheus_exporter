@@ -115,7 +115,7 @@
     group: root
     mode: "0644"
   notify:
-    - reload systemd
+    - Reload systemd
 
 - name: "{{ _exporter.name }} | Configure service state"
   ansible.builtin.systemd:

@@ -1,8 +1,10 @@
 ---
 galaxy_info:
-  author: Rheinwerk
+  author: rheinwerk
+  role_name: prometheus_exporter
   description: Generic role for installing Prometheus exporters from GitHub releases
-  license: MIT
+  company: Rheinwerk
+  license: license (GPLv3)
   min_ansible_version: "2.12"
   platforms:
     - name: Debian
