@@ -9,6 +9,7 @@ Generic Ansible role for installing Prometheus exporters from GitHub releases.
 - Generates systemd service with security hardening
 - Supports version checking to avoid unnecessary reinstalls
 - Configurable for different GitHub organizations and URL patterns
+- Supports installing multiple exporters in a single role call
 
 ## Requirements
 
@@ -17,100 +18,119 @@ Generic Ansible role for installing Prometheus exporters from GitHub releases.
 
 ## Role Variables
 
-### Required Variables
+### Main Variable
+
+The role uses a list-based configuration via `prometheus_exporters`:
 
 ```yaml
-prometheus_exporter_name: "elasticsearch_exporter"  # Name of the exporter
-prometheus_exporter_version: "1.10.0"               # Version to install
-prometheus_exporter_listen_port: "9114"             # Port to listen on
+prometheus_exporters:
+  - name: elasticsearch_exporter      # (required) Name of the exporter
+    version: "1.10.0"                 # (required) Version to install
+    listen_port: "9114"               # (required) Port to listen on
+    listen_address: "127.0.0.1"       # (optional) Address to listen on
+    github_org: prometheus-community  # (optional) GitHub organization
+    github_repo: elasticsearch_exporter  # (optional) Repository name (default: same as name)
+    arch: amd64                       # (optional) Architecture override (default: auto-detected)
+    download_url: ""                  # (optional) Full download URL (default: auto-detected)
+    binary_name: elasticsearch_exporter  # (optional) Binary name (default: same as name)
+    system_user: elasticsearch_exporter  # (optional) System user (default: derived from name)
+    system_group: elasticsearch_exporter # (optional) System group (default: same as system_user)
+    config_dir: /etc/elasticsearch_exporter  # (optional) Config directory
+    service_name: elasticsearch_exporter  # (optional) Systemd service name
+    service_enabled: true             # (optional) Enable service (default: true)
+    service_state: stopped            # (optional) Service state (default: stopped)
+    extra_args: []                    # (optional) Extra command line arguments
+    env_vars: {}                      # (optional) Environment variables for systemd service
 ```
 
-### Optional Variables
+### Global Defaults
 
 ```yaml
-# GitHub source
-prometheus_exporter_github_org: "prometheus-community"  # GitHub organization
-prometheus_exporter_github_repo: "{{ prometheus_exporter_name }}"  # Repository name
+# Default listen address for all exporters
+prometheus_exporter_listen_address: "127.0.0.1"
 
-# Listen configuration
-prometheus_exporter_listen_address: "127.0.0.1"  # Address to bind to
-
-# System user/group
-prometheus_exporter_system_user: "elasticsearch_exporter"
-prometheus_exporter_system_group: "elasticsearch_exporter"
-
-# Service configuration
+# Default service configuration
 prometheus_exporter_service_enabled: true
-prometheus_exporter_service_state: stopped  # stopped or started
+prometheus_exporter_service_state: stopped
 
-# Extra command line arguments
-prometheus_exporter_extra_args:
-  - "--es.uri=http://localhost:9200"
+# Installation path
+prometheus_exporter_install_dir: "/usr/local/bin"
 
-# Environment variables
-prometheus_exporter_env_vars:
-  ES_USERNAME: "elastic"
-  ES_PASSWORD: "changeme"
-
-# Custom download URL (for non-standard release formats)
-prometheus_exporter_download_url: "https://custom-url/exporter.tar.gz"
-
-# Custom web listen flag (some exporters use different flags)
-prometheus_exporter_web_listen_flag: "--web.listen-address"
+# Architecture mapping
+prometheus_exporter_arch_map:
+  x86_64: "amd64"
+  aarch64: "arm64"
+  armv7l: "armv7"
 ```
 
 ## Example Usage
 
-### Installing elasticsearch_exporter
+### Single Exporter
 
 ```yaml
 - hosts: elasticsearch
   roles:
     - role: prometheus-exporter
       vars:
-        prometheus_exporter_name: "elasticsearch_exporter"
-        prometheus_exporter_version: "1.10.0"
-        prometheus_exporter_listen_port: "9114"
-        prometheus_exporter_extra_args:
-          - "--es.uri=http://localhost:9200"
+        prometheus_exporters:
+          - name: elasticsearch_exporter
+            version: "1.10.0"
+            listen_port: "9114"
+            github_org: prometheus-community
+            extra_args:
+              - "--es.uri=http://localhost:9200"
 ```
 
-### Installing postfix_exporter (kumina)
-
-```yaml
-- hosts: mailservers
-  roles:
-    - role: prometheus-exporter
-      vars:
-        prometheus_exporter_name: "postfix_exporter"
-        prometheus_exporter_version: "0.4.1"
-        prometheus_exporter_listen_port: "9154"
-        prometheus_exporter_github_org: "kumina"
-        prometheus_exporter_extra_args:
-          - "--postfix.showq_path=/var/spool/postfix/public/showq"
-```
-
-### Multiple exporters in one playbook
+### Multiple Exporters
 
 ```yaml
 - hosts: all
-  tasks:
-    - name: Install elasticsearch_exporter
-      ansible.builtin.include_role:
-        name: prometheus-exporter
+  roles:
+    - role: prometheus-exporter
       vars:
-        prometheus_exporter_name: "elasticsearch_exporter"
-        prometheus_exporter_version: "1.10.0"
-        prometheus_exporter_listen_port: "9114"
+        prometheus_exporters:
+          - name: elasticsearch_exporter
+            version: "1.10.0"
+            listen_port: "9114"
+            github_org: prometheus-community
+            extra_args: []
 
-    - name: Install postfix_exporter
-      ansible.builtin.include_role:
-        name: prometheus-exporter
+          - name: postfix_exporter
+            version: "2.1.0"
+            listen_port: "9154"
+            github_org: sergeymakinen
+            extra_args: []
+
+          - name: process-exporter
+            version: "0.8.7"
+            listen_port: "9256"
+            github_org: ncabatoff
+            extra_args: []
+
+          - name: systemd_exporter
+            version: "0.7.0"
+            listen_port: "9558"
+            github_org: prometheus-community
+            extra_args: []
+```
+
+### With Environment Variables
+
+```yaml
+- hosts: elasticsearch
+  roles:
+    - role: prometheus-exporter
       vars:
-        prometheus_exporter_name: "postfix_exporter"
-        prometheus_exporter_version: "0.4.1"
-        prometheus_exporter_listen_port: "9154"
-        prometheus_exporter_github_org: "kumina"
+        prometheus_exporters:
+          - name: elasticsearch_exporter
+            version: "1.10.0"
+            listen_port: "9114"
+            github_org: prometheus-community
+            extra_args:
+              - "--es.uri=http://localhost:9200"
+            env_vars:
+              ES_USERNAME: "elastic"
+              ES_PASSWORD: "changeme"
 ```
 
 ## Supported Exporters
@@ -120,7 +140,9 @@ This role can install any exporter that follows the standard Prometheus release 
 | Exporter | GitHub Org | Port | Notes |
 |----------|------------|------|-------|
 | elasticsearch_exporter | prometheus-community | 9114 | |
-| postfix_exporter | kumina | 9154 | |
+| postfix_exporter | sergeymakinen | 9154 | |
+| process-exporter | ncabatoff | 9256 | |
+| systemd_exporter | prometheus-community | 9558 | |
 | rabbitmq_exporter | kbudde | 9419 | |
 | redis_exporter | oliver006 | 9121 | |
 | nginx_exporter | nginxinc | 9113 | |
