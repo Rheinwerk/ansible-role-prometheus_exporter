@@ -1,0 +1,25 @@
+# Keep in sync with CenterDevice/infrastructure/AWS/prod/common_resources/packer/resources/baseimage_debian12/ansible/group_vars/all.yml
+prometheus_exporters:
+  - name: elasticsearch_exporter
+    version: "1.10.0"
+    listen_port: "9114"
+    github_org: prometheus-community
+    extra_args: []
+
+  - name: postfix_exporter
+    version: "2.1.0"
+    listen_port: "9154"
+    github_org: sergeymakinen
+    extra_args: []
+
+  - name: process-exporter
+    version: "0.8.7"
+    listen_port: "9256"
+    github_org: ncabatoff
+    extra_args: []
+
+  - name: systemd_exporter
+    version: "0.7.0"
+    listen_port: "9558"
+    github_org: prometheus-community
+    extra_args: []
