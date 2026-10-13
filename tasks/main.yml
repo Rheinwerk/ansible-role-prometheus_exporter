@@ -13,7 +13,7 @@
     loop_var: _exporter
     label: "{{ _exporter.name }}"
   vars:
-    _exporter_arch: "{{ _exporter.arch | default(prometheus_exporter_arch_map[ansible_architecture] | default('amd64')) }}"
+    _exporter_arch: "{{ _exporter.arch | default(prometheus_exporter_arch_map[ansible_facts['architecture']] | default('amd64')) }}"
     _exporter_github_org: "{{ _exporter.github_org | default('prometheus-community') }}"
     _exporter_github_repo: "{{ _exporter.github_repo | default(_exporter.name) }}"
     _exporter_binary_name: "{{ _exporter.binary_name | default(_exporter.name) }}"
